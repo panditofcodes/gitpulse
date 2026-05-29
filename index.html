@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Git Watcher Configuration</title>
+
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 30px;
+        background: #f4f6f9;
+        font-family: "Segoe UI", sans-serif;
+      }
+
+      .container {
+        max-width: 1100px;
+        margin: auto;
+      }
+
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      }
+
+      h1,
+      h2 {
+        margin-top: 0;
+        color: #333;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #555;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+      }
+
+      input {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+      }
+
+      button {
+        border: none;
+        border-radius: 8px;
+        padding: 10px 16px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .btn-primary {
+        background: #007bff;
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background: #0069d9;
+      }
+
+      .btn-danger {
+        background: #dc3545;
+        color: white;
+      }
+
+      .btn-danger:hover {
+        background: #c82333;
+      }
+
+      .repo-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+
+        padding: 18px;
+        margin-bottom: 15px;
+
+        border: 1px solid #e5e5e5;
+        border-radius: 10px;
+
+        background: #fafafa;
+      }
+
+      .repo-item small {
+        display: block;
+        margin-top: 4px;
+        color: #666;
+      }
+
+      .repo-actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .action-bar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .empty-state {
+        text-align: center;
+        color: #888;
+        border: 2px dashed #ddd;
+        border-radius: 10px;
+        padding: 25px;
+      }
+
+      #currentFile {
+        margin-top: 15px;
+        color: #666;
+        font-size: 14px;
+      }
+
+      @media (max-width: 768px) {
+        body {
+          padding: 15px;
+        }
+
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .repo-item {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="card">
+        <h1>Git Watcher Configuration</h1>
+
+        <label> Check Interval (Seconds) </label>
+
+        <input type="number" id="interval" value="60" />
+      </div>
+
+      <div class="card">
+        <h2>Repository Details</h2>
+
+        <div class="form-grid">
+          <input id="name" placeholder="Repository Name" />
+
+          <input id="path" placeholder="/home/user/project" />
+
+          <input id="remote" value="origin" />
+
+          <input id="branch" value="develop" />
+        </div>
+
+        <br />
+
+        <button class="btn-primary" onclick="addRepo()">Save Repository</button>
+      </div>
+
+      <div class="card">
+        <h2>Repositories</h2>
+
+        <div id="repoList"></div>
+      </div>
+
+      <div class="card">
+        <div class="action-bar">
+          <button class="btn-primary" onclick="openConfig()">
+            📂 Open Config
+          </button>
+
+          <button class="btn-primary" onclick="saveConfig()">
+            💾 Save Config
+          </button>
+        </div>
+
+        <div id="currentFile">No Config Loaded</div>
+      </div>
+    </div>
+
+    <script>
+      let repositories = [];
+      let configFileHandle = null;
+
+      if (!window.showOpenFilePicker || !window.showSaveFilePicker) {
+        alert(
+          "Please use Chrome, Brave, Edge or Chromium. Firefox does not support this feature.",
+        );
+      }
+
+      async function openConfig() {
+        try {
+          const [fileHandle] = await window.showOpenFilePicker({
+            types: [
+              {
+                description: "JSON Files",
+                accept: {
+                  "application/json": [".json"],
+                },
+              },
+            ],
+          });
+
+          configFileHandle = fileHandle;
+
+          const file = await fileHandle.getFile();
+
+          const text = await file.text();
+
+          const config = JSON.parse(text);
+
+          document.getElementById("interval").value =
+            config.check_interval || 60;
+
+          repositories = config.repositories || [];
+
+          renderRepos();
+
+          document.getElementById("currentFile").innerText =
+            `Loaded: ${file.name}`;
+        } catch (error) {
+          console.error(error);
+          alert(error.message);
+        }
+      }
+
+      async function saveConfig() {
+        try {
+          if (!configFileHandle) {
+            configFileHandle = await window.showSaveFilePicker({
+              suggestedName: "config.json",
+              types: [
+                {
+                  description: "JSON File",
+                  accept: {
+                    "application/json": [".json"],
+                  },
+                },
+              ],
+            });
+          }
+
+          const config = {
+            check_interval: parseInt(document.getElementById("interval").value),
+
+            repositories,
+          };
+
+          const writable = await configFileHandle.createWritable();
+
+          await writable.write(JSON.stringify(config, null, 4));
+
+          await writable.close();
+
+          document.getElementById("currentFile").innerText =
+            `Saved: ${configFileHandle.name}`;
+
+          alert("Configuration saved successfully.");
+        } catch (error) {
+          console.error(error);
+          alert(error.message);
+        }
+      }
+
+      function clearForm() {
+        document.getElementById("name").value = "";
+
+        document.getElementById("path").value = "";
+
+        document.getElementById("remote").value = "origin";
+
+        document.getElementById("branch").value = "develop";
+      }
+
+      function addRepo() {
+        const repo = {
+          name: document.getElementById("name").value.trim(),
+
+          path: document.getElementById("path").value.trim(),
+
+          remote: document.getElementById("remote").value.trim(),
+
+          branch: document.getElementById("branch").value.trim(),
+        };
+
+        if (!repo.name || !repo.path) {
+          alert("Repository Name and Path are required.");
+
+          return;
+        }
+
+        repositories.push(repo);
+
+        renderRepos();
+
+        clearForm();
+      }
+
+      function editRepo(index) {
+        const repo = repositories[index];
+
+        document.getElementById("name").value = repo.name;
+
+        document.getElementById("path").value = repo.path;
+
+        document.getElementById("remote").value = repo.remote;
+
+        document.getElementById("branch").value = repo.branch;
+
+        repositories.splice(index, 1);
+
+        renderRepos();
+      }
+
+      function removeRepo(index) {
+        if (!confirm("Delete this repository?")) {
+          return;
+        }
+
+        repositories.splice(index, 1);
+
+        renderRepos();
+      }
+
+      function renderRepos() {
+        const list = document.getElementById("repoList");
+
+        list.innerHTML = "";
+
+        if (repositories.length === 0) {
+          list.innerHTML = `
+            <div class="empty-state">
+                No repositories configured.
+                <br>
+                Add your first repository.
+            </div>
+        `;
+
+          return;
+        }
+
+        repositories.forEach((repo, index) => {
+          list.innerHTML += `
+                <div class="repo-item">
+
+                    <div>
+
+                        <strong>
+                            ${repo.name}
+                        </strong>
+
+                        <small>
+                            <b>Path:</b>
+                            ${repo.path}
+                        </small>
+
+                        <small>
+                            <b>Remote:</b>
+                            ${repo.remote}
+                        </small>
+
+                        <small>
+                            <b>Branch:</b>
+                            ${repo.branch}
+                        </small>
+
+                    </div>
+
+                    <div class="repo-actions">
+
+                        <button
+                            class="btn-primary"
+                            onclick="editRepo(${index})"
+                        >
+                            Edit
+                        </button>
+
+                        <button
+                            class="btn-danger"
+                            onclick="removeRepo(${index})"
+                        >
+                            Delete
+                        </button>
+
+                    </div>
+
+                </div>
+            `;
+        });
+      }
+
+      renderRepos();
+    </script>
+  </body>
+</html>
+```
